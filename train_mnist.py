@@ -12,11 +12,14 @@ from src.loss import YoloLoss
 from src.tiny_yolo_net import Yolo
 from tensorboardX import SummaryWriter
 import shutil
+import time
+import datetime
+
 
 
 def get_args():
     parser = argparse.ArgumentParser("You Only Look Once: Unified, Real-Time Object Detection")
-    parser.add_argument("--image_size", type=int, default=208, help="The common width and height for all images")
+    parser.add_argument("--image_size", type=int, default=80, help="The common width and height for all images")
     parser.add_argument("--batch_size", type=int, default=512, help="The number of images per batch")
     parser.add_argument("--train_dataset_size", type=int, default=50000, help="The number of train_dataset")
     parser.add_argument("--test_dataset_size", type=int, default=10000, help="The number of test_dataset")
@@ -36,11 +39,11 @@ def get_args():
                         help="Early stopping's parameter: number of epochs with no improvement after which training will be stopped. Set to 0 to disable this technique.")
     parser.add_argument("--train_set", type=str, default="train")
     parser.add_argument("--test_set", type=str, default="test")
-    parser.add_argument("--data_path", type=str, default="/home/jongwan0317/work/snn/TinyYOLOv2_mnist/data/mnist/data/mnist_detection", help="the root folder of dataset")
-    parser.add_argument("--pre_trained_model_type", type=str, choices=["model", "params"], default="model")
-    parser.add_argument("--pre_trained_model_path", type=str, default="/home/jongwan0317/work/snn/TinyYOLOv2_mnist/trained_models/whole_model_trained_yolo_mnist")
-    parser.add_argument("--log_path", type=str, default="/home/jongwan0317/work/snn/TinyYOLOv2_mnist/tensorboard/yolo_mnist")
-    parser.add_argument("--saved_path", type=str, default="trained_models")
+    parser.add_argument("--data_path", type=str, default="./data/mnist/data/mnist_detection", help="the root folder of dataset")
+    parser.add_argument("--pretrained_model_type", type=str, choices=["model", "params"], default="model")
+    parser.add_argument("--pretrained_model_path", type=str, default="./trained_models")
+    parser.add_argument("--log_path", type=str, default="./tensorboard/yolo_mnist")
+    parser.add_argument("--saved_dir", type=str, default="./trained_models")
 
     args = parser.parse_args()
     return args
@@ -67,30 +70,36 @@ def train(opt):
     training_generator = DataLoader(training_set, **training_params)
 
     testing_set = mnistDataset(opt.data_path, opt.test_set, opt.image_size, opt.test_dataset_size)
+
     test_generator = DataLoader(testing_set, **test_params)
+    pre_path = os.path.join(opt.pretrained_model_path, 'epochs{}, b{}'.format(opt.num_epoches, opt.batch_size))
+    premodel_path = os.path.join(opt.pretrained_model_path, 'epochs{}, b{}'.format(opt.num_epoches, opt.batch_size), "model.pt")
+    prestate_path = os.path.join(opt.pretrained_model_path, 'epochs{}, b{}'.format(opt.num_epoches, opt.batch_size), "model_state_dict.pt")
 
     if torch.cuda.is_available():
-       if opt.pre_trained_model_type == "model":
-           if os.path.isfile(opt.pre_trained_model_path):
-               model = torch.load(opt.pre_trained_model_path)
-           else:
-               model = Yolo(training_set.num_classes)
-               # model.load_state_dict(torch.load(opt.pre_trained_model_path))
-    #else:
-        #if opt.pre_trained_model_type == "model":
-           #model = torch.load(opt.pre_trained_model_path, map_location=lambda storage, loc: storage)
-        #else:
-           #model = Yolo(training_set.num_classes)
-           #model.load_state_dict(torch.load(opt.pre_trained_model_path, map_location=lambda storage, loc: storage))
+        if os.path.isdir(pre_path):
+            print("using pre-trained model")
+            model = torch.load(premodel_path)
+            model.load_state_dict(prestate_path)
+        else:
+            print("creating model")
+            model = Yolo(training_set.num_classes)
     # The following line will re-initialize weight for the last layer, which is useful
     # when you want to retrain the model based on my trained weights. if you uncomment it,
     # you will see the loss is already very small at the beginning.
 
+    start = time.time()
     nn.init.normal_(list(model.modules())[-1].weight, 0, 0.01)
-    if os.path.isdir(opt.log_path):
-        shutil.rmtree(opt.log_path)
-    os.makedirs(opt.log_path)
-    writer = SummaryWriter(opt.log_path)
+
+    timestamp = datetime.datetime.now().strftime("%m-%d-%H:%M")
+    log_paths = os.path.join(opt.log_path, timestamp)
+    print('=> Log data will be saved to {}'.format(log_paths))
+
+    if os.path.isdir(log_paths):
+        shutil.rmtree(log_paths)
+    os.makedirs(log_paths)
+    writer = SummaryWriter(log_paths)
+
     if torch.cuda.is_available():
         writer.add_graph(model.cpu(), torch.rand(opt.batch_size, 1, opt.image_size, opt.image_size))
         model.cuda()
@@ -102,6 +111,7 @@ def train(opt):
     best_epoch = 0
     model.train()
     num_iter_per_epoch = len(training_generator)
+
     for epoch in range(opt.num_epoches):
         if str(epoch) in learning_rate_schedule.keys():
             for param_group in optimizer.param_groups:
@@ -131,6 +141,7 @@ def train(opt):
             writer.add_scalar('Train/Coordination_loss', loss_coord, epoch * num_iter_per_epoch + iter)
             writer.add_scalar('Train/Confidence_loss', loss_conf, epoch * num_iter_per_epoch + iter)
             writer.add_scalar('Train/Class_loss', loss_cls, epoch * num_iter_per_epoch + iter)
+
         if epoch % opt.test_interval == 0:
             model.eval()
             loss_ls = []
@@ -165,21 +176,37 @@ def train(opt):
             writer.add_scalar('Test/Coordination_loss', te_coord_loss, epoch)
             writer.add_scalar('Test/Confidence_loss', te_conf_loss, epoch)
             writer.add_scalar('Test/Class_loss', te_cls_loss, epoch)
+
             model.train()
+
+            save_path = 'epochs{}, b{}'.format(opt.num_epoches, opt.batch_size)
+            saved_path = os.path.join(opt.saved_dir, save_path)
+            print('=> Training model will be saved to {}'.format(saved_path))
+
+            if not os.path.exists(saved_path):
+                os.makedirs(saved_path)
+
             if te_loss + opt.es_min_delta < best_loss:
                 best_loss = te_loss
                 best_epoch = epoch
-                torch.save(model, opt.saved_path + os.sep + "trained_yolo_mnist")
-                torch.save(model.state_dict(), opt.saved_path + os.sep + "only_params_trained_yolo_mnist")
-                torch.save(model, opt.saved_path + os.sep + "whole_model_trained_yolo_mnist")
+
+                torch.save(model, saved_path + os.sep + 'model.pt')
+                torch.save(model.state_dict(), saved_path + os.sep + 'model_state_dict.pt')
+                torch.save({'model': model.state_dict(), 'optimizer': optimizer.state_dict()}, saved_path + os.sep + 'all.tar')
 
             # Early stopping
             if epoch - best_epoch > opt.es_patience > 0:
                 print("Stop training at epoch {}. The lowest loss achieved is {}".format(epoch, te_loss))
                 break
-    writer.export_scalars_to_json(opt.log_path + os.sep + "all_logs.json")
-    writer.close()
 
+    writer.export_scalars_to_json(log_paths + os.sep + "all_logs.json")
+    writer.close()
+    print("time :", time.time() - start)
+    print(os.getcwd())
+
+    torch.save(model, saved_path + os.sep + 'model.pt')
+    torch.save(model.state_dict(), saved_path + os.sep + 'model_state_dict.pt')
+    torch.save({'model': model.state_dict(), 'optimizer': optimizer.state_dict()}, saved_path + os.sep + 'all.tar')
 
 if __name__ == "__main__":
     opt = get_args()
