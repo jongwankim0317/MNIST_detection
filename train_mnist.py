@@ -5,17 +5,18 @@
 import os
 import argparse
 import torch.nn as nn
-from torch.utils.data import DataLoader
+import numpy as np
+import shutil
+import time
+import datetime
 from src.mnist_dataset import mnistDataset
 from src.utils import *
 from src.loss import YoloLoss
 from src.tiny_yolo_net import Yolo
 from tensorboardX import SummaryWriter
-import shutil
-import time
-import datetime
+from torch.utils.data import DataLoader
 
-
+classes = np.array(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
 
 def get_args():
     parser = argparse.ArgumentParser("You Only Look Once: Unified, Real-Time Object Detection")
@@ -70,8 +71,8 @@ def train(opt):
     training_generator = DataLoader(training_set, **training_params)
 
     testing_set = mnistDataset(opt.data_path, opt.test_set, opt.image_size, opt.test_dataset_size)
-
     test_generator = DataLoader(testing_set, **test_params)
+
     pre_path = os.path.join(opt.pretrained_model_path, 'epochs{}, b{}'.format(opt.num_epoches, opt.batch_size))
     premodel_path = os.path.join(opt.pretrained_model_path, 'epochs{}, b{}'.format(opt.num_epoches, opt.batch_size), "model.pt")
     prestate_path = os.path.join(opt.pretrained_model_path, 'epochs{}, b{}'.format(opt.num_epoches, opt.batch_size), "model_state_dict.pt")
@@ -202,7 +203,6 @@ def train(opt):
     writer.export_scalars_to_json(log_paths + os.sep + "all_logs.json")
     writer.close()
     print("time :", time.time() - start)
-    print(os.getcwd())
 
     torch.save(model, saved_path + os.sep + 'model.pt')
     torch.save(model.state_dict(), saved_path + os.sep + 'model_state_dict.pt')
