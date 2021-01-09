@@ -11,10 +11,10 @@ import numpy as np
 import shutil
 import time
 import datetime
-from src.mnist_dataset import mnistDataset
+from src.dataset import MNISTdataset
 from src.utils import *
 from src.loss import YoloLoss
-from src.tiny_yolo_net import Yolo
+from src.model import Yolo
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 
@@ -24,7 +24,7 @@ def get_args():
     parser = argparse.ArgumentParser("You Only Look Once: Unified, Real-Time Object Detection")
     parser.add_argument("--image_size", type=int, default=80,
                         help="The common width and height for all images")
-    parser.add_argument("--batch_size", type=int, default=2048,
+    parser.add_argument("--batch_size", type=int, default=1024,
                         help="The number of images per batch")
     parser.add_argument("--train_dataset_size", type=int, default=50000,
                         help="The number of train_dataset")
@@ -33,7 +33,7 @@ def get_args():
     parser.add_argument("--momentum", type=float, default=0.9)
     parser.add_argument("--decay", type=float, default=0.0005)
     parser.add_argument("--dropout", type=float, default=0.5)
-    parser.add_argument("--num_epoches", type=int, default=2)
+    parser.add_argument("--num_epoches", type=int, default=100)
     parser.add_argument("--test_interval", type=int, default=10,
                         help="Number of epoches between testing phases")
     parser.add_argument("--object_scale", type=float, default=1.0)
@@ -43,12 +43,12 @@ def get_args():
     parser.add_argument("--reduction", type=int, default=32)
     parser.add_argument("--es_min_delta", type=float, default=0.0,
                         help="Early stopping's parameter: minimum change loss to qualify as an improvement")
-    parser.add_argument("--es_patience", type=int, default=0,
+    parser.add_argument("--es_patience", type=int, default=50,
                         help="Early stopping's parameter: number of epochs with no improvement after which training will be stopped. "
                              "Set to 0 to disable this technique.")
     parser.add_argument("--train_set", type=str, default="train")
     parser.add_argument("--test_set", type=str, default="test")
-    parser.add_argument("--data_path", type=str, default="/home/jongwan0317/dataset/MNIST2020_train/MNISTdevkit/MNIST2020/",
+    parser.add_argument("--data_path", type=str, default="/home/jongwan0317/dataset/MNIST2020/MNIST2020_train/MNISTdevkit/MNIST2020/",
                         help="the root folder of dataset")
     parser.add_argument("--pretrained_model_type", type=str, choices=["model", "state", "None"], default="state")
     parser.add_argument("--pretrained_model_path", type=str, default="./trained_models/model")
@@ -73,7 +73,7 @@ def train(opt):
         torch.cuda.manual_seed(123)
     else:
         torch.manual_seed(123)
-    learning_rate_schedule = {"0": 1e-3, "5": 1e-3,
+    learning_rate_schedule = {"0": 1e-3, "5": 1e-4,
                               "80": 1e-5, "110": 1e-5}
     training_params = {"batch_size": opt.batch_size,
                        "shuffle": True,
@@ -85,10 +85,10 @@ def train(opt):
                    "drop_last": False,
                    "collate_fn": custom_collate_fn}
 
-    training_set = mnistDataset(opt.data_path, opt.train_set, opt.image_size, opt.train_dataset_size)
+    training_set = MNISTdataset(opt.data_path, opt.train_set, opt.image_size, opt.train_dataset_size)
     training_generator = DataLoader(training_set, **training_params)
 
-    testing_set = mnistDataset(opt.data_path, opt.test_set, opt.image_size, opt.test_dataset_size)
+    testing_set = MNISTdataset(opt.data_path, opt.test_set, opt.image_size, opt.test_dataset_size)
     test_generator = DataLoader(testing_set, **test_params)
 
 
@@ -103,7 +103,6 @@ def train(opt):
             model = Yolo(training_set.num_classes)
             _state = recent_file(opt.pretrained_state_path)
             model.load_state_dict(torch.load(_state))
-
             print("Load model_state from : ", _state)
         else:
             model = Yolo(training_set.num_classes)
