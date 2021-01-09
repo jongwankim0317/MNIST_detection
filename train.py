@@ -33,7 +33,7 @@ def get_args():
     parser.add_argument("--momentum", type=float, default=0.9)
     parser.add_argument("--decay", type=float, default=0.0005)
     parser.add_argument("--dropout", type=float, default=0.5)
-    parser.add_argument("--num_epoches", type=int, default=100)
+    parser.add_argument("--num_epoches", type=int, default=2)
     parser.add_argument("--test_interval", type=int, default=10,
                         help="Number of epoches between testing phases")
     parser.add_argument("--object_scale", type=float, default=1.0)
@@ -50,7 +50,7 @@ def get_args():
     parser.add_argument("--test_set", type=str, default="test")
     parser.add_argument("--data_path", type=str, default="/home/jongwan0317/dataset/MNIST2020_train/MNISTdevkit/MNIST2020/",
                         help="the root folder of dataset")
-    parser.add_argument("--pretrained_model_type", type=str, choices=["model", "state", "None"], default="None")
+    parser.add_argument("--pretrained_model_type", type=str, choices=["model", "state", "None"], default="state")
     parser.add_argument("--pretrained_model_path", type=str, default="./trained_models/model")
     parser.add_argument("--pretrained_state_path", type=str, default="./trained_models/state")
     parser.add_argument("--log_path", type=str, default="./tensorboard/yolo_mnist")
@@ -62,7 +62,7 @@ def get_args():
 def recent_file(input_path):
     each_file_path_and_gen_time = []
     for each_file_name in os.listdir(input_path):
-        each_file_path = input_path + each_file_name
+        each_file_path = os.path.join(input_path, each_file_name)
         each_file_gen_time = os.path.getctime(each_file_path)
         each_file_path_and_gen_time.append((each_file_path, each_file_gen_time))
     most_recent_file = max(each_file_path_and_gen_time, key=lambda x: x[1])[0]
@@ -94,16 +94,17 @@ def train(opt):
 
     if torch.cuda.is_available():
         if opt.pretrained_model_type == "model":
-            _model = recent_file(opt.pretrained_model_path)
-            model_path = os.path.join(opt.pretrained_model_path, _model)
-            model = torch.load(model_path)
             print("Using pre-trained model")
+            _model = recent_file(opt.pretrained_model_path)
+            model = torch.load(_model)
+            print("Load model from : ", _model)
         elif opt.pretrained_model_type == "state":
+            print("Using pre-trained model_state")
             model = Yolo(training_set.num_classes)
             _state = recent_file(opt.pretrained_state_path)
-            state_path = os.path.join(opt.pretrained_model_path, _state)
-            model.load_state_dict(torch.load(state_path))
-            print("Using pre-trained model_state")
+            model.load_state_dict(torch.load(_state))
+
+            print("Load model_state from : ", _state)
         else:
             model = Yolo(training_set.num_classes)
             print("Making a new model")
@@ -210,8 +211,10 @@ def train(opt):
             print('=> Training model will be saved to {}'.format(model_save_dir))
             print('=> Training model state will be saved to {}'.format(state_save_dir))
 
-            if not os.path.exists(opt.save_dir):
-                os.makedirs(opt.save_dir)
+            if not os.path.exists(model_save_dir):
+                os.makedirs(model_save_dir)
+            if not os.path.exists(state_save_dir):
+                os.makedirs(state_save_dir)
 
             if te_loss + opt.es_min_delta < best_loss:
                 best_loss = te_loss
