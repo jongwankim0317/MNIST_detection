@@ -7,6 +7,7 @@
 data_generation.py
 ```
 - It is recommended to check the data path setting.
+### Quantization
 
 ### Training
 ### Testing
