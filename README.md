@@ -2,7 +2,7 @@
 
 ### Requirements:
 
-### Before you object MNIST digits, you must make dataset.
+### Data generation
 ```python
 data_generation.py
 ```
