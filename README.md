@@ -10,5 +10,14 @@ data_generation.py
 ### Quantization
 
 ### Training
+```python
+train.py
+```
 ### Testing
+```python
+test.py
+```
 ### mAP
+```python
+mAP.py
+```
