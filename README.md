@@ -21,4 +21,5 @@ test.py
 ```python
 mAP.py
 ```
--- results
+- Results
+![Darknet Logo](http://pjreddie.com/media/files/darknet-black-small.png)
